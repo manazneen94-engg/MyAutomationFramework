@@ -1,204 +1,333 @@
-# MyAutomationFramework — Mobile UI Automation (Appium)
+# Swag Labs Mobile Automation Framework
 
-Purpose
-I implemented a mobile UI automation framework (Android) using Appium to demonstrate stable, maintainable end-to-end tests for common user flows (login, negative login, logout, plus one additional flow). This repo is submitted as part of my Wipro technical assessment.
+A Python mobile test automation framework for the Swag Labs Android application, built with Appium, Pytest, and the Page Object Model (POM).
 
-Summary of what this submission contains
-- A framework implemented by me that follows Page Object Model (POM), central driver management, data-driven test examples, and failure handling (screenshots, logs, reports).
-- Example Android APK reference (place your APK in the repository as described below).
-- Clear commands to run tests locally and in CI, and notes on how I used AI and how I handle flaky tests and other issues.
+This README describes the framework for one Android device at a time. Parallel testing is intentionally excluded.
 
-Table of contents
+## Contents
+- Project Overview
+- Technology Stack
+- Framework Folder Structure
 - Prerequisites
-- Files & recommended layout
-- Configure the project
-- Quick commands (install APK, start Appium, run tests)
-- How tests are executed (runtime flow)
-- Design decisions and key components
-- Flakiness handling and troubleshooting
-- How I used AI (explicit)
-- What is included / what is not covered
-- Sample reports / artifacts
-- Contact & license
+- Setup
+- Configuration
+- Test Scenarios
+- How to Run Tests
+- Allure Reports
+- Failure Evidence
+- Framework Components
+- Troubleshooting
 
-Prerequisites (local machine)
-- JDK 11 or 17
-  - verify: java -version
-- Maven (if using Maven build)
-  - verify: mvn -v
-- Node.js + Appium server
-  - Install Appium: npm install -g appium
-  - or run with npx: npx appium
-- Android SDK (for Android)
-  - Set ANDROID_HOME and PATH to include platform-tools and tools/bin
-  - Create an AVD using avdmanager / android emulator, or use a connected device
-- Xcode + simulator (for iOS; macOS only)
-- (Optional) Allure commandline for reports:
-  - brew install allure or follow instructions at docs
+---
 
-Quick start (Android / Java + Maven example)
+## Project Overview
+The framework automates common user journeys in the Swag Labs Android app:
+- Log in with valid credentials and verify the Products page.
+- Run invalid-login scenarios using data stored in an Excel spreadsheet.
+- Add a product to the cart and verify that it appears in the cart.
+- Remove a product from the cart.
+- Log out and verify that the login screen is displayed.
 
-1. Start Appium
-   - npx appium
-   - or appium &   (runs in background)
+Reusable page objects keep tests readable. Pytest fixtures manage the driver and shared test dependencies. Allure records test steps and can include screenshots, page source, and device logs when a test fails.
 
-2. Start emulator (Android example)
-   - $ANDROID_HOME/emulator/emulator -avd <AVD_NAME>
+---
 
-3. Run full test suite
-   - mvn clean test
+## Technology Stack
+| Tool or library | Purpose |
+|---|---|
+| Python | Programming language |
+| Appium | Mobile automation server |
+| Appium-Python-Client | Python interface for Appium |
+| UiAutomator2 | Android automation driver |
+| Pytest | Test runner, fixtures, parametrization |
+| Selenium support libraries | Explicit waits and expected conditions |
+| openpyxl | Reading test data from Excel |
+| Allure Pytest | Test steps, attachments, reporting |
+| ADB | Android device connection and log collection |
 
-4. Run a specific test class
-   - mvn -Dtest=com.mycompany.tests.MyLoginTest test
+---
 
-5. Run tests with a Maven profile (example profiles: android-emulator, android-device, ios-simulator)
-   - mvn clean test -Pandroid-emulator
+## Framework Folder Structure
+Keep the names aligned with files present in the repository. Example structure:
 
-6. Generate and open Allure report (if configured)
-   - mvn test
-   - mvn allure:serve   # this will run a temporary server and open the report
+```
+SwagLabs/
+│
+├── app/
+│   └── SwagLabs.apk                 # Android application under test
+│
+├── pages/
+│   ├── __init__.py
+│   ├── BasePage.py                  # Shared waits and reusable UI actions
+│   ├── LoginPage.py                 # Login screen locators and actions
+│   ├── ProductPage.py               # Products, add-to-cart, menu, logout
+│   └── CartPage.py                  # Cart item checks and remove action
+│
+├── tests/
+│   ├── test_LoginFlow.py            # Valid, invalid, and logout scenarios
+│   └── test_AddToCart.py            # Add-to-cart and cart verification
+│
+├── testData/
+│   └── InValidUsers.xlsx            # Invalid-login test data
+│
+├── utils/
+│   ├── __init__.py
+│   ├── Excel_Reader.py              # Loads rows from Excel
+│   ├── soft_assert.py               # Collects soft assertion failures
+│   └── appium_server.py             # Starts/stops the Appium server
+│
+├── reports/
+│   ├── screenshots/                 # Failure screenshots (generated)
+│   ├── logs/                        # Device logs (generated)
+│   └── page_source/                 # XML page source (generated)
+│
+├── allure-results/                  # Raw Allure results (generated)
+├── conftest.py                      # Driver and shared Pytest fixtures/hooks
+├── pytest.ini                        # Pytest discovery/default options
+├── requirements.txt                  # Python dependencies
+├── .gitignore
+└── README.md
+```
 
-APK in this repo (prerequisite)
-- Place the Android APK you want to test under:
-  - apps/android/MyApp-debug.apk
-- If you already included an APK, ensure the path above matches. If not present, add the APK before running tests.
+### What each main folder is for
+- `app/` — stores the APK used for testing.
+- `pages/` — contains page classes and locators. UI operations belong here rather than being duplicated in test methods.
+- `tests/` — contains test cases and assertions for user journeys.
+- `testData/` — stores external test inputs such as invalid usernames, passwords, and expected error messages.
+- `utils/` — contains reusable helpers, including Excel reading, soft assertions, and Appium server management.
+- `reports/` and `allure-results/` — hold generated evidence and reporting files (not source code).
+- `conftest.py` — provides fixtures shared by tests, including the Appium driver, page objects, soft assertion object, and failure-artifact hook.
 
-Recommended file layout (actual implementation may use these paths)
-.
-├─ apps/                        # put your APK(s) here (apps/android/*.apk)
-├─ configs/                     # environment properties / capability profiles
-│  └─ default.properties
-├─ drivers/                     # driver utilities or helper scripts
-├─ src/
-│  ├─ main/
-│  │  ├─ java/
-│  │  │  ├─ com/mycompany/framework/
-│  │  │  │  ├─ driver/         # DriverFactory, SessionManager
-│  │  │  │  ├─ utils/          # helpers: log, wait, screenshot
-│  │  │  │  └─ config/         # capability builders, config readers
-│  ├─ test/
-│  │  ├─ java/
-│  │  │  ├─ com/mycompany/tests/
-│  │  │  │  ├─ pages/          # Page objects / screen objects
-│  │  │  │  ├─ tests/          # TestNG or JUnit test classes
-│  │  │  │  └─ data/           # test data providers / fixtures
-├─ reports/                 # generated reports, screenshots, logs
-├─ scripts/                 # helper scripts (start-emulator.sh, install-apk.sh)
-├─ pom.xml                  # Maven build (if Java)
-└─ README.md
+---
 
-Configuration approach
-- Config files (preferred): configs/default.properties, configs/android-emulator.properties, configs/android-device.properties
-- Environment variables (optional override):
-  - APPIUM_SERVER — e.g. http://localhost:4723/wd/hub
-  - PLATFORM_NAME — Android
-  - APP_PATH — path to APK (defaults to apps/android/MyApp-debug.apk)
-  - DEVICE_NAME / UDID / PLATFORM_VERSION
-- The framework reads configs first, then allows overrides via system properties or environment variables for CI flexibility:
-  - Example Maven override: mvn test -Dapp.path=/tmp/app.apk -Ddevice.name=Pixel_3
+## Prerequisites
+Install and configure:
+- Python and pip
+- Node.js and npm
+- Appium server
+- Appium UiAutomator2 driver
+- Android SDK Platform Tools (`adb`)
+- An Android phone with Developer options and USB debugging enabled
+- Swag Labs APK (included in `apps/`)
+- Allure command-line tool (optional, for opening reports)
 
-Example config (configs/default.properties)
-appium.server=http://localhost:4723/wd/hub
-platform.name=Android
-device.name=Pixel_3_API_30
-platform.version=11.0
-app.path=apps/android/MyApp-debug.apk
-automation.name=UiAutomator2
+Check your Python installation:
+```powershell
+py --version
+```
 
-Start Appium in a known state
-- If you use uiAutomator2 and adb:
-  adb devices
-  adb -s <deviceId> install path/to/app.apk
+Check that your phone is connected and authorized:
+```powershell
+adb devices -l
+```
+Your phone should show status `device`. If `unauthorized`, unlock the phone and approve the USB debugging prompt.
 
-Running on iOS (macOS only)
-- Ensure Xcode, Carthage/CocoaPods if needed, and proper signing config are present.
-- Use platformName=iOS and appropriate deviceName (Simulator) or udid for real device.
+Check Appium and installed drivers:
+```powershell
+appium --version
+appium driver list --installed
+```
 
-Running with Docker (optional)
-- You can run Appium server in Docker. Example:
-  docker run -d -p 4723:4723 --name appium appium/appium
+Install UiAutomator2 if not installed:
+```powershell
+appium driver install uiautomator2
+```
 
-CI (example notes)
-- Example CI steps:
-  - Setup JDK, Node and Appium (or start Appium service)
-  - Start emulator (Android) or use device farm (BrowserStack / Sauce Labs)
-  - Run mvn -DskipTests=false test
-  - Publish reports/ and screenshots/ as build artifacts
-- Save the reports/ directory and Allure results for analysis.
+---
 
-How tests execute (brief)
-- Tests call methods in page/screen objects.
-- Page objects use the DriverFactory to access an AppiumDriver.
-- DriverFactory reads a config profile (e.g., android-emulator, android-device, ios-simulator).
-- Tests are data-driven where needed via TestNG data providers or CSV/JSON fixtures.
-- On failure, the framework captures a screenshot and stores logs under reports/.
+## Setup
+1. Open the project directory
 
-Design decisions and key components (what I implemented and why)
-- Page Object Model: each screen/page is a dedicated class with clear actions and element locators.
-- DriverFactory: centralizes AppiumDriver creation and applies capability profiles.
-- Config separation: environment-specific settings are stored in configs/ and not hard-coded.
-- Retry & stability: implemented a retry analyzer (TestNG) for transient failures and explicit wait utilities to reduce flakiness.
-- Screenshots & logs: on-failure hooks capture screenshots and save driver logs to reports/.
-- Data-driven tests: data providers read CSV/JSON to run the same test with multiple data sets.
-- Parallel runs: ThreadLocal driver handling allows running tests in parallel without session collision.
-- Extensibility: adding a new device profile or page object is straightforward — follow the folder pattern.
+```powershell
+cd C:\path\to\SwagLabs
+```
 
-Flakiness handling and reliability measures (concrete)
-- Locators: use resource-id / accessibility-id where possible to avoid brittle XPath.
-- Synchronization: explicit waits and utility wait methods to reduce flakiness.
-- Retry Analyzer: re-run flaky tests a configurable small number of times (TestNG retry analyzer) while logging retries.
-- Test isolation: each test starts from a known app state (clear app data or restart app as required).
-- Timeouts: conservative timeouts for operations and a configurable newCommandTimeout to avoid session drop.
-- Backoff & health checks: before test run, verify Appium server and device are reachable (adb devices, Appium health endpoint).
-- Artifacts for debugging: on failure save screenshot, page source, and device logs (adb logcat) to reports/.
-- CI strategy: run smoke subset on every push; schedule full/regression runs off-peak or on device farm to reduce flakiness due to emulator startup times.
+Run commands from this directory so Pytest can find `pytest.ini`, `conftest.py`, the `tests` folder, and test data.
 
-How I used AI (explicit statement for the assessment)
-I used AI tools during design and development for non-proprietary tasks:
-- Research & comparison: validate options (Appium client versions, TestNG vs JUnit, Allure config) and get example capability snippets.
-- Design assistance: generate README drafts, sample config files, and example DriverFactory / retry-analyzer pseudocode to speed iteration.
-- Troubleshooting guidance: quick suggestions for common Appium errors (e.g., session creation issues, platform capability mismatches) — I validated fixes myself.
-- Code templates: generate small helper templates (e.g., wait utilities, screenshot helper) which I reviewed and adapted to fit the final implementation.
-Note: I did not copy any proprietary code; everything generated or referenced was checked and adapted by me.
+2. Create a virtual environment
 
-What is included in this submission
-- Framework source (POM, DriverFactory, Page Objects, tests) — if you see only README now, the code will be available in the repository. (If the code is missing, please check the repo branch or I can push it on request.)
-- APK placement instruction and sample config to run tests against the APK you include.
-- Failure handling, screenshots, and reporting configuration.
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-What is NOT covered in this repo (intentionally)
-- Full cross-platform implementation for iOS (iOS notes and capability guidance are present but iOS tests are not included).
-- BDD (Cucumber/SpecFlow) style implementation — not implemented in submitted code.
-- Tagging (smoke/regression tagging using a runner’s tag system) — not implemented in submitted code.
-- API tests — not part of this submission.
+If PowerShell blocks activation, use the environment interpreter directly:
+```powershell
+.\.venv\Scripts\python.exe --version
+```
 
-Sample report / artifacts
-- After a test run, artifacts are located under:
-  reports/
-  ├─ screenshots/
-  ├─ logs/
-  └─ allure-results/   (if Allure is enabled)
-- Example: reports/screenshots/LoginTest_shouldLogin_success_2026-10-17-12-00-00.png
+3. Install Python dependencies
+Create or update `requirements.txt` and install:
 
-Troubleshooting tips (common failures)
-- Appium server not reachable:
-  - Check APPIUM_SERVER config and run npx appium; verify port 4723 is open.
-- Device not found:
-  - Run adb devices and ensure emulator/device is online.
-- APK install fails:
-  - adb uninstall <pkg> && adb install -r apps/android/MyApp-debug.apk
-- Flaky element not found:
-  - replace brittle locator, add explicit wait, or retry the action with a small backoff.
+```powershell
+py -m pip install -r requirements.txt
+```
 
-Notes for reviewers (how to evaluate)
-- Check src/test/java/.../pages for page object separation.
-- Check DriverFactory (or equivalent) for capability handling.
-- Run mvn -Dtest=... to run specific tests and see reports in reports/.
-- Inspect retry and wait utilities to evaluate stability considerations.
+4. Install the APK (if required)
 
-Contact
-- Repository owner: manazneen94-engg
-- For questions during the technical round: open an issue in this repo or message me directly.
+```powershell
+adb install -r app\SwagLabs.apk
+```
 
-License
-- See LICENSE in this repo.
+The framework uses the package `com.swaglabsmobileapp` and activity `com.swaglabsmobileapp.MainActivity`. Verify these values if a different APK is used.
+
+5. Start the Appium server
+The `appium_server.py` helper can manage Appium lifecycle (via the `appium_server` fixture). To start Appium manually:
+
+```powershell
+appium --address 127.0.0.1 --port 4723
+```
+
+Do not run two Appium servers on the same port. The driver URL in `conftest.py` should match the server (e.g. `http://127.0.0.1:4723`).
+
+---
+
+## Configuration
+The `driver` fixture in `conftest.py` must identify the Android device. Find device UDID:
+```powershell
+adb devices -l
+```
+
+Update capabilities in `conftest.py` accordingly, for example:
+```python
+options.platform_name = "Android"
+options.device_name = "OnePlus"
+options.automation_name = "UiAutomator2"
+options.udid = "YOUR_ANDROID_DEVICE_UDID"
+options.app_package = "com.swaglabsmobileapp"
+options.app_activity = "com.swaglabsmobileapp.MainActivity"
+options.no_reset = True
+```
+Replace `YOUR_ANDROID_DEVICE_UDID` with the actual UDID. Use `no_reset` based on your test isolation needs.
+
+---
+
+## Test Scenarios
+**Login — `tests/test_LoginFlow.py`**
+- Valid credentials navigate to Products page.
+- Invalid credentials display expected validation message.
+- Locked-out user receives appropriate error.
+- Logging out returns user to login screen.
+
+**Add to Cart — `tests/test_AddToCart.py`**
+- Login with valid credentials.
+- Add a product from Products page.
+- Open cart and verify the product displays.
+- Optionally remove product and logout as cleanup.
+
+### Excel test data
+`testData/InValidUsers.xlsx` should contain columns such as: `Username`, `Password`, `ExpectedResult`. Match column headings with keys used by `Excel_Reader.py`.
+
+---
+
+## How to Run Tests
+Run all tests from project root:
+```powershell
+py -m pytest
+```
+
+Run login tests only:
+```powershell
+py -m pytest tests/test_LoginFlow.py -v -s
+```
+
+Run add-to-cart tests only:
+```powershell
+py -m pytest tests/test_AddToCart.py -v -s
+```
+
+Run a single test function:
+```powershell
+py -m pytest tests/test_AddToCart.py::test_add_to_cart -v -s
+```
+
+List discovered tests without running:
+```powershell
+py -m pytest --collect-only -q
+```
+
+---
+
+## Pytest Configuration
+Example `pytest.ini`:
+```ini
+[pytest]
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+
+addopts = -v -s --alluredir=allure-results
+```
+This writes raw Allure results to `allure-results` and configures discovery. Parallel testing is intentionally excluded.
+
+---
+
+## Allure Reports
+Generate Allure results during test runs:
+```powershell
+py -m pytest
+```
+Open the report:
+```powershell
+allure serve allure-results
+```
+Clear `allure-results` before a fresh run to avoid mixing old and new results. Use `with allure.step("..."):` for named steps and `allure.attach(...)` to include files.
+
+---
+
+## Failure Evidence
+`pytest_runtest_makereport` in `conftest.py` captures:
+- Screenshot: `reports/screenshots/`
+- Page source: `reports/page_source/`
+- Android logcat: `reports/logs/`
+
+Attach logs to Allure and inspect locally with `adb -s YOUR_ANDROID_DEVICE_UDID logcat -d`.
+
+---
+
+## Framework Components
+**BasePage.py** — shared actions and explicit-wait helpers (click, type, scroll).
+
+**Page classes**
+- `LoginPage.py` — login actions, error message locators
+- `ProductPage.py` — product listing, add-to-cart, menu, logout
+- `CartPage.py` — cart checks and removal
+
+Each page receives the driver in `__init__` and uses BasePage for common operations. Keep locators in page classes; keep assertions in tests.
+
+**conftest.py** — manages Appium server lifecycle (optional), function-scoped driver, `pages` fixture (LoginPage, ProductPage, CartPage), `soft_assert` fixture, and failure artifact hook.
+
+**soft_assert.py** — accumulates assertion failures; call `soft_assert.assert_all()` at test end.
+
+**Excel_Reader.py** — loads rows for parameterized invalid-login tests. Keep Excel column names consistent.
+
+---
+
+## Troubleshooting
+- `pytest` not recognized: run via Python: `py -m pytest` and ensure virtual env is activated.
+- Appium connection refused: ensure Appium is running at `127.0.0.1:4723` and the driver URL matches.
+- Android device not detected: `adb devices -l` — reconnect or enable USB debugging.
+- `NoSuchElementException` / `TimeoutException`: verify app screen, inspect page source, prefer resource/accessibility IDs, use explicit waits.
+- Invalid-login assertion mismatch: print `expected`/`actual` with `!r` to reveal whitespace. Confirm Excel values match the app version.
+- Driver not closed: ensure `driver.quit()` is called in fixture `finally` block.
+
+---
+
+## .gitignore suggestions
+```
+.venv/
+__pycache__/
+.pytest_cache/
+allure-results/
+allure-report/
+reports/screenshots/
+reports/logs/
+reports/page_source/
+*.pyc
+```
+Do not commit secrets, local paths, or generated artifacts.
+
+---
+
+Scope: This README covers single-device Android testing. Parallel testing is intentionally not covered.
