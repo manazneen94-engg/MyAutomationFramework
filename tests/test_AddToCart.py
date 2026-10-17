@@ -4,6 +4,8 @@ import allure
 from pages.CartPage import CartPage
 from pages.LoginPage import LoginPage
 from pages.ProductPage import ProductPage
+
+@pytest.mark.smoke
 def test_add_to_cart(pages, soft_assert):
     login_page, product_page, cart_page = pages
 

@@ -18,6 +18,7 @@ def get_user_data():
     ]
 
 #Simple one round of Login and Logout scenario and verify if Login Page is displayed.
+@pytest.mark.smoke
 @pytest.mark.order(1)
 def test_Login_Logout(pages, soft_assert, username, password):
     login_page, product_page, cart_page = pages
@@ -36,6 +37,7 @@ def test_Login_Logout(pages, soft_assert, username, password):
 
 
 #Login & Verify Products Title and Logut from app
+@pytest.mark.smoke
 @pytest.mark.order(2)
 @pytest.mark.parametrize("username,password", get_user_data())
 def test_Login_Verify_Title(pages, soft_assert, username, password):
@@ -54,7 +56,7 @@ def test_Login_Verify_Title(pages, soft_assert, username, password):
     product_page.Logout()
     soft_assert.assert_all()
 
-
+@pytest.mark.regression
 @pytest.mark.order(3)
 @pytest.mark.parametrize(
     "test_data",
