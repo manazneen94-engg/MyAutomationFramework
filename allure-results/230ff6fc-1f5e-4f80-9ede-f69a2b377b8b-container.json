@@ -1,0 +1,1 @@
+{"uuid": "cdcb7b85-0ed4-4d8e-9968-79f74cfa520f", "children": ["435e3aa6-8522-4878-aa92-b5d7238a6cab"], "befores": [{"name": "soft_assert", "status": "passed", "start": 1792250456994, "stop": 1792250456994}], "afters": [{"name": "soft_assert::<lambda>", "start": 1792250462539}], "start": 1792250456994, "stop": 1792250462539}
